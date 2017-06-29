@@ -27,14 +27,14 @@ type AmbientWeatherMessage struct {
 	TimeStr      string  `json:"time"`
 }
 
-func newAmbientWeatherSensor(msg *AmbientWeatherMessage) *accessory.Thermometer {
+func newAmbientWeatherSensor(msg *AmbientWeatherMessage) *ThermoHygrometer {
 	info := accessory.Info{
 		Name:         "Temperature Sensor",
 		SerialNumber: fmt.Sprintf("%d-%d", msg.Device, msg.Channel),
 		Manufacturer: "Ambient Weather",
 		Model:        msg.Model,
 	}
-	thermometer := accessory.NewTemperatureSensor(info, ftoc(msg.TemperatureF), -40, 60, 1)
+	thermometer := NewThermoHygrometer(info, ftoc(msg.TemperatureF), -40, 60, 0.1, msg.Humidity, 10, 99, 1)
 	return thermometer
 }
 
@@ -57,9 +57,9 @@ func awmsgReader(reader *bufio.Reader) chan *AmbientWeatherMessage {
 	return c
 }
 
-func detectSensors(c chan *AmbientWeatherMessage) *map[string]*accessory.Thermometer {
+func detectSensors(c chan *AmbientWeatherMessage) *map[string]*ThermoHygrometer {
 	fmt.Println("Detecting sensors")
-	thermometerMap := map[string]*accessory.Thermometer{}
+	thermometerMap := map[string]*ThermoHygrometer{}
 	done := make(chan bool)
 	go func() {
 		time.Sleep(60 * time.Second)
@@ -107,10 +107,11 @@ func main() {
 			select {
 			case awmsg := <-c:
 				key := fmt.Sprintf("%d-%d", awmsg.Device, awmsg.Channel)
-				if thermometer, ok := (*thermometerMap)[key]; ok {
+				if thermoHygrometer, ok := (*thermometerMap)[key]; ok {
 					fmt.Printf("Got Temp from sensor %d %d: %.2f°F\n", awmsg.Device, awmsg.Channel, awmsg.TemperatureF)
 					temp := ftoc(float64(awmsg.TemperatureF))
-					thermometer.TempSensor.CurrentTemperature.SetValue(temp)
+					thermoHygrometer.TempSensor.CurrentTemperature.SetValue(temp)
+					thermoHygrometer.HumiditySensor.CurrentRelativeHumidity.SetValue(awmsg.Humidity)
 				} else {
 					fmt.Println("Message from unknown sensor", key)
 				}
