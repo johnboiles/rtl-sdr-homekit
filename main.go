@@ -31,7 +31,7 @@ type AmbientWeatherMessage struct {
 
 func newAmbientWeatherSensor(msg *AmbientWeatherMessage) *ThermoHygrometer {
 	info := accessory.Info{
-		Name:         "Temperature Sensor",
+		Name:         "Thermo Hygrometer",
 		SerialNumber: fmt.Sprintf("d:%d c:%d", msg.Device, msg.Channel),
 		Manufacturer: "Ambient Weather",
 		Model:        msg.Model,
@@ -70,7 +70,7 @@ func detectSensors(c chan *AmbientWeatherMessage) *map[string]*ThermoHygrometer 
 	for {
 		select {
 		case awmsg := <-c:
-			fmt.Printf("Detected sensor %d: %.2f°F %.1f%rh\n", awmsg.Channel, awmsg.TemperatureF, awmsg.Humidity)
+			fmt.Printf("Detected sensor %d: %.2f°F %.1f%%rh\n", awmsg.Channel, awmsg.TemperatureF, awmsg.Humidity)
 			thermometer := newAmbientWeatherSensor(awmsg)
 			key := fmt.Sprintf("%d", awmsg.Channel)
 			thermometerMap[key] = thermometer
@@ -98,7 +98,7 @@ func main() {
 			case awmsg := <-c:
 				key := fmt.Sprintf("%d", awmsg.Channel)
 				if thermoHygrometer, ok := (*thermometerMap)[key]; ok {
-					fmt.Printf("Got data from sensor %d: %.2f°F %.1f%rh\n", awmsg.Channel, awmsg.TemperatureF, awmsg.Humidity)
+					fmt.Printf("Got data from sensor %d: %.2f°F %.1f%%rh\n", awmsg.Channel, awmsg.TemperatureF, awmsg.Humidity)
 					temp := ftoc(float64(awmsg.TemperatureF))
 					thermoHygrometer.TempSensor.CurrentTemperature.SetValue(temp)
 					thermoHygrometer.HumiditySensor.CurrentRelativeHumidity.SetValue(awmsg.Humidity)
