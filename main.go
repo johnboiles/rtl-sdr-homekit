@@ -8,6 +8,8 @@ import (
 	"os"
 	"time"
 
+	"sort"
+
 	"github.com/brutella/hc"
 	"github.com/brutella/hc/accessory"
 )
@@ -30,7 +32,7 @@ type AmbientWeatherMessage struct {
 func newAmbientWeatherSensor(msg *AmbientWeatherMessage) *ThermoHygrometer {
 	info := accessory.Info{
 		Name:         "Temperature Sensor",
-		SerialNumber: fmt.Sprintf("%d-%d", msg.Device, msg.Channel),
+		SerialNumber: fmt.Sprintf("d:%d c:%d", msg.Device, msg.Channel),
 		Manufacturer: "Ambient Weather",
 		Model:        msg.Model,
 	}
@@ -68,9 +70,9 @@ func detectSensors(c chan *AmbientWeatherMessage) *map[string]*ThermoHygrometer 
 	for {
 		select {
 		case awmsg := <-c:
-			fmt.Printf("Detected sensor %d %d: %.2f°F\n", awmsg.Device, awmsg.Channel, awmsg.TemperatureF)
+			fmt.Printf("Detected sensor %d: %.2f°F %.1f%rh\n", awmsg.Channel, awmsg.TemperatureF, awmsg.Humidity)
 			thermometer := newAmbientWeatherSensor(awmsg)
-			key := fmt.Sprintf("%d-%d", awmsg.Device, awmsg.Channel)
+			key := fmt.Sprintf("%d", awmsg.Channel)
 			thermometerMap[key] = thermometer
 		case <-done:
 			done = nil
@@ -90,25 +92,13 @@ func main() {
 
 	thermometerMap := detectSensors(c)
 
-	//msg := AmbientWeatherMessage{
-	//	Device:  75,
-	//	Channel: 2,
-	//}
-	//info := accessory.Info{
-	//	Name: "Temperature Sensor",
-	//	//SerialNumber: fmt.Sprintf("%d-%d", msg.Device, msg.Channel),
-	//	Manufacturer: "Ambient Weather",
-	//	Model:        "Ambient Weather F007TH Thermo-Hygrometer",
-	//}
-	//thermometer := accessory.NewTemperatureSensor(info, msg.TemperatureF, -40, 60, 1)
-
 	go func() {
 		for {
 			select {
 			case awmsg := <-c:
-				key := fmt.Sprintf("%d-%d", awmsg.Device, awmsg.Channel)
+				key := fmt.Sprintf("%d", awmsg.Channel)
 				if thermoHygrometer, ok := (*thermometerMap)[key]; ok {
-					fmt.Printf("Got Temp from sensor %d %d: %.2f°F\n", awmsg.Device, awmsg.Channel, awmsg.TemperatureF)
+					fmt.Printf("Got data from sensor %d: %.2f°F %.1f%rh\n", awmsg.Channel, awmsg.TemperatureF, awmsg.Humidity)
 					temp := ftoc(float64(awmsg.TemperatureF))
 					thermoHygrometer.TempSensor.CurrentTemperature.SetValue(temp)
 					thermoHygrometer.HumiditySensor.CurrentRelativeHumidity.SetValue(awmsg.Humidity)
@@ -119,25 +109,22 @@ func main() {
 		}
 	}()
 
-	//go func() {
-	//	for {
-	//		select {
-	//		case awmsg := <-c:
-	//			fmt.Printf("Got Temp from sensor %d %d: %.2f°F\n", awmsg.Device, awmsg.Channel, awmsg.TemperatureF)
-	//			temp := ftoc(float64(awmsg.TemperatureF))
-	//			thermometer.TempSensor.CurrentTemperature.SetValue(temp)
-	//		}
-	//	}
-	//}()
-
 	if len(*thermometerMap) == 0 {
 		log.Fatal("No sensors detected")
 		os.Exit(1)
 	}
 
+	keys := []string{}
+	for key, _ := range *thermometerMap {
+		keys = append(keys, key)
+	}
+
+	// Sort keys to maintain a consistent order for the accessories (otherwise HomeKit will switch around the sensors)
+	sort.Strings(keys)
+
 	thermometers := []*accessory.Accessory{}
-	for _, value := range *thermometerMap {
-		thermometers = append(thermometers, value.Accessory)
+	for _, key := range keys {
+		thermometers = append(thermometers, (*thermometerMap)[key].Accessory)
 	}
 
 	primary := thermometers[0]
