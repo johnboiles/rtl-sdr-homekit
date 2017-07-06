@@ -12,6 +12,8 @@ import (
 
 	"github.com/brutella/hc"
 	"github.com/brutella/hc/accessory"
+	"github.com/yosssi/gmq/mqtt"
+	"github.com/yosssi/gmq/mqtt/client"
 )
 
 func ftoc(f float64) float64 {
@@ -90,6 +92,25 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 	c := awmsgReader(reader)
 
+	// Create an MQTT Client.
+	cli := client.New(&client.Options{
+		// Define the processing of the error handler.
+		ErrorHandler: func(err error) {
+			fmt.Println("ERROR", err)
+		},
+	})
+	// Terminate the Client.
+	defer cli.Terminate()
+	// Connect to the MQTT Server.
+	err := cli.Connect(&client.ConnectOptions{
+		Network:  "tcp",
+		Address:  "house-pi.local:1883",
+		ClientID: []byte("rtl-sdr-haaa"),
+	})
+	if err != nil {
+		panic(err)
+	}
+
 	thermometerMap := detectSensors(c)
 
 	go func() {
@@ -102,6 +123,22 @@ func main() {
 					temp := ftoc(float64(awmsg.TemperatureF))
 					thermoHygrometer.TempSensor.CurrentTemperature.SetValue(temp)
 					thermoHygrometer.HumiditySensor.CurrentRelativeHumidity.SetValue(awmsg.Humidity)
+
+					// Publish a message.
+					out, err := json.Marshal(awmsg)
+					if err != nil {
+						fmt.Println("ERROR marshalling", err)
+					}
+					err = cli.Publish(&client.PublishOptions{
+						QoS:    mqtt.QoS0,
+						Retain: true,
+						// Separate topic per sensor makes our life easier in home-assistant
+						TopicName: []byte(fmt.Sprintf("rtl_433/sensor/%d", awmsg.Channel)),
+						Message:   out,
+					})
+					if err != nil {
+						panic(err)
+					}
 				} else {
 					fmt.Println("Message from unknown sensor", key)
 				}
