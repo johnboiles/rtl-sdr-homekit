@@ -143,9 +143,11 @@ func main() {
 						TopicName: []byte(fmt.Sprintf("rtl_433/sensor/%d", awmsg.Channel)),
 						Message:   out,
 					})
-					if err == client.ErrNotYetConnected {
+					switch err {
+					case nil:
+					case client.ErrNotYetConnected:
 						cli.Connect(opts)
-					} else {
+					default:
 						panic(err)
 					}
 				} else {
