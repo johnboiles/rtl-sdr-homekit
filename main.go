@@ -102,11 +102,13 @@ func main() {
 	// Terminate the Client.
 	defer cli.Terminate()
 	// Connect to the MQTT Server.
-	err := cli.Connect(&client.ConnectOptions{
+	// TODO: Have this come from a cli interface or config file or something
+	opts := &client.ConnectOptions{
 		Network:  "tcp",
 		Address:  "house-pi.local:1883",
 		ClientID: []byte("rtl-sdr-haaa"),
-	})
+	}
+	err := cli.Connect(opts)
 	if err != nil {
 		panic(err)
 	}
@@ -129,6 +131,11 @@ func main() {
 					if err != nil {
 						fmt.Println("ERROR marshalling", err)
 					}
+					// TODO: Maybe use the HA auto discover feature?
+					// https://home-assistant.io/docs/mqtt/discovery/
+					// We'd need a config file for this project for coherent naming, but that might be ok, since it'd
+					// benefit homekit also to have coherent naming per channel
+					// I wonder if there's a way to genericize this for other types of sensors / detectors
 					err = cli.Publish(&client.PublishOptions{
 						QoS:    mqtt.QoS0,
 						Retain: true,
@@ -136,7 +143,9 @@ func main() {
 						TopicName: []byte(fmt.Sprintf("rtl_433/sensor/%d", awmsg.Channel)),
 						Message:   out,
 					})
-					if err != nil {
+					if err == client.ErrNotYetConnected {
+						cli.Connect(opts)
+					} else {
 						panic(err)
 					}
 				} else {
